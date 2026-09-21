@@ -446,6 +446,37 @@ def ranking(cultivo: str,
     }
 
 
+@app.get("/api/dispersion", tags=["analisis"])
+def dispersion(cultivo: str,
+               desde: int = Query(1980, ge=1970, le=2010),
+               tendencia: str = Query("movil", pattern="^(movil|lineal)$"),
+               minimo_campanias: int = Query(15, ge=5, le=55),
+               superficie_minima_ha: float = Query(0.0, ge=0),
+               provincia: str | None = None):
+    """La nube entera de un cultivo: ONI contra desvio, campania por campania.
+
+    Alimenta el scatter y el boxplot. A diferencia de `/api/ranking`, que da
+    una mediana por partido, aca va cada campania de cada partido sin resumir.
+
+    Los puntos viajan como tres arrays paralelos (`oni`, `desvio`, `fase`) en
+    vez de una lista de objetos: son ~8.000 y repetir las claves en cada uno
+    triplicaria el payload.
+    """
+    m = _motor()
+    clave = ("disp", cultivo, desde, tendencia, minimo_campanias,
+             superficie_minima_ha, provincia)
+    try:
+        d = _cacheado(clave, lambda: m.consulta_dispersion(
+            cultivo, desde=desde, metodo_tendencia=tendencia,
+            minimo_campanias=minimo_campanias,
+            superficie_minima_ha=superficie_minima_ha, provincia=provincia))
+    except consulta.SinDatos as e:
+        raise HTTPException(404, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return d
+
+
 # ---------------------------------------------------------------------------
 # Frontend
 # ---------------------------------------------------------------------------

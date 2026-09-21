@@ -231,6 +231,12 @@ button.accion:hover { background: var(--linea); }
 /* -- graficos ------------------------------------------------------------ */
 
 .grafico { width: 100%; display: block; overflow: visible; }
+
+/* El mapa SI recorta. El encuadre se ajusta a los partidos CON dato, pero se
+ * dibujan los 483: los de contexto que caen fuera del recorte se proyectaban
+ * con coordenadas negativas y, con overflow visible, pintaban encima de la
+ * tarjeta de al lado. */
+#g-mapa { overflow: hidden; width: auto; max-width: 100%; margin: 0 auto; }
 .grafico .grilla { stroke: var(--linea); stroke-width: 1; shape-rendering: crispEdges; }
 .grafico .cero { stroke: var(--linea-fuerte); stroke-width: 1; shape-rendering: crispEdges; }
 .grafico .eje-txt { fill: var(--texto-3); font-size: 11px; font-family: var(--sans); }
@@ -315,10 +321,6 @@ footer.pie a { color: var(--texto-2); }
 
 /* El trazo va del color de la superficie, no negro: separa departamentos
  * vecinos sin dibujar un borde que compita con el dato. */
-/* El mapa se calcula su propio ancho segun el encuadre; estirarlo al 100 %
- * como al resto de los graficos lo deformaria. */
-#g-mapa { width: auto; max-width: 100%; margin: 0 auto; }
-
 .depto { stroke: var(--surface-1); stroke-width: .5; stroke-linejoin: round; }
 .depto:hover { stroke: var(--texto); stroke-width: 1.4; }
 .depto-sin { fill: var(--mapa-sin); stroke: var(--surface-1); stroke-width: .5; }
@@ -341,3 +343,12 @@ footer.pie a { color: var(--texto-2); }
 @media (max-width: 720px) {
   .mapa-caja { grid-template-columns: 1fr; }
 }
+
+/* -- dispersion ---------------------------------------------------------- */
+
+.grafico .nube { fill-opacity: .32; }
+.grafico .ajuste { stroke-width: 2; stroke-linecap: round; fill: none; }
+.grafico .caja-borde { stroke-width: 1.5; fill-opacity: .22; }
+.grafico .caja-mediana { stroke-width: 2.5; stroke-linecap: round; }
+.grafico .bigote { stroke-width: 1.5; stroke-linecap: round; }
+.grafico .panel-sep { stroke: var(--linea); stroke-width: 1; shape-rendering: crispEdges; }

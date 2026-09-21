@@ -178,6 +178,25 @@
         </div>
       </div>
 
+
+      <div class="tarjeta">
+        <h2 id="d-titulo"></h2>
+        <p class="sub">Izquierda: cada punto es una campania de un partido.
+          Derecha: la misma nube resumida por fase. Comparten el eje vertical,
+          asi que se leen juntas. El eje Y es el desvio contra la tendencia de
+          cada partido, no el rinde en kg: mezclar rindes crudos de partidos
+          distintos no significa nada.</p>
+        <div class="leyenda">
+          <span><i class="punto f-Nina"></i>Nina</span>
+          <span><i class="punto f-Neutro"></i>Neutro</span>
+          <span><i class="punto f-Nino"></i>Nino</span>
+          <span id="d-ajuste" style="color:var(--texto-3)"></span>
+        </div>
+        <svg class="grafico" id="g-dispersion" role="img"></svg>
+        <div class="scrollable" style="margin-top:12px">
+          <table class="datos" id="t-caja"></table>
+        </div>
+      </div>
     </div>
   </section>
 

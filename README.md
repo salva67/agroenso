@@ -97,17 +97,26 @@ En `http://localhost:8000`. Dos vistas:
   tendencia, coloreada por fase; la diferencia de medianas por fase con IC 90 %;
   el ranking de sensibilidad climática; y las advertencias metodológicas que
   corresponden a *ese* resultado. Descargable en CSV.
-- **Mapa por partido** (la vista que abre) — para un cultivo y una fase, los
+- **Mapa por partido** (la vista que abre), con la nube de puntos debajo — para un cultivo y una fase, los
   483 partidos pintados por cuánto se desvía su rinde. El encuadre se ajusta
   solo a la zona donde el cultivo tiene serie: para maíz abarca de Salta a Río
   Negro, para caña se va al NOA. Arranca con maíz ya elegido, así lo primero
   que se ve es el mapa dibujado y no un selector vacío.
+
+  Debajo, en su propia tarjeta: un **scatter de ONI contra desvío** con una
+  campaña de un partido por punto, y al lado el **boxplot de esa misma nube
+  por fase**. Comparten el eje vertical, así que se leen juntos — la nube
+  muestra la dispersión, las cajas el resumen. Para maíz son 8.341 campañas
+  de 194 partidos, con r² de 0,061: el gradiente de medianas es claro
+  (Niña −7,1 %, Neutro +2,5 %, Niño +7,2 %) y los rangos intercuartiles se
+  superponen mucho, que es exactamente lo que hay que ver.
 
 La API está documentada sola en `/docs`. Los endpoints útiles:
 
 ```
 GET /api/analisis?departamento_id=06721&cultivo=maiz&desde=1980&umbral=-15
 GET /api/ranking?cultivo=maiz&fase=Nina&superficie_minima_ha=3000
+GET /api/dispersion?cultivo=maiz&desde=1980  → la nube entera, sin resumir
 GET /api/analisis.csv?...&tabla=resumen
 GET /api/enso        /api/enso/fases        /api/partidos        /api/cultivos
 GET /api/geo/departamentos  → polígonos en GeoJSON (gzip, cacheado 24 h)

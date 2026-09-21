@@ -45,6 +45,30 @@ class SinDatos(LookupError):
     """La combinacion partido x cultivo no existe o es demasiado corta."""
 
 
+def caja(v: np.ndarray) -> dict:
+    """Estadisticos de un boxplot de Tukey.
+
+    Bigotes al dato mas extremo dentro de 1,5 veces el rango intercuartil, que
+    es la convencion; los puntos fuera de ahi NO se devuelven uno por uno
+    porque son miles y el scatter de al lado ya muestra la nube completa.
+    """
+    v = np.asarray(v, dtype=float)
+    v = v[np.isfinite(v)]
+    if len(v) < 5:
+        return {}
+    q1, med, q3 = (float(x) for x in np.percentile(v, [25, 50, 75]))
+    iqr = q3 - q1
+    dentro = v[(v >= q1 - 1.5 * iqr) & (v <= q3 + 1.5 * iqr)]
+    return {
+        "n": int(len(v)),
+        "q1": round(q1, 1), "mediana": round(med, 1), "q3": round(q3, 1),
+        "bigote_inf": round(float(dentro.min()), 1),
+        "bigote_sup": round(float(dentro.max()), 1),
+        "atipicos": int(len(v) - len(dentro)),
+        "media": round(float(v.mean()), 1),
+    }
+
+
 class Motor:
     """Snapshot cargado en memoria con sus indices.
 
@@ -328,6 +352,91 @@ class Motor:
         return (pd.DataFrame(filas)
                 .sort_values("desvio_mediano_pct")
                 .reset_index(drop=True))
+
+    def dispersion(self, cultivo: str, desde: int = 1980,
+                   metodo_tendencia: str = "movil", minimo_campanias: int = 15,
+                   superficie_minima_ha: float = 0.0,
+                   provincia: str | None = None) -> pd.DataFrame:
+        """Todas las campanias de un cultivo, en crudo: ONI contra desvio.
+
+        Una fila por partido x campania. Es el material del scatter y del
+        boxplot: a diferencia de `ranking`, que colapsa cada partido a su
+        mediana, aca no se resume nada — se ve la nube entera, que es lo unico
+        que muestra cuanta dispersion hay detras de esas medianas.
+
+        El eje Y es el DESVIO, no el rinde en kg. Mezclar rindes crudos de
+        partidos distintos no significa nada: un mal anio en Pergamino rinde
+        mas que un buen anio en Patagones. Contra la tendencia propia de cada
+        partido, si son comparables.
+        """
+        cn = self.normalizar_cultivo(cultivo)
+        fases = self.fases[self.ciclo(cn)]
+        oni_de = fases["oni_medio"].to_dict()
+        fase_de = fases["fase"].to_dict()
+        from .rindes import normalizar
+        pn = normalizar(provincia) if provincia else None
+
+        filas = []
+        for (dep, cul), pos in self._idx.items():
+            if cul != cn:
+                continue
+            r = self.rindes.take(pos)
+            r = r[r["anio"] >= desde]
+            if len(r) < minimo_campanias:
+                continue
+            if pn and normalizar(str(r["provincia"].iloc[0])) != pn:
+                continue
+            if superficie_minima_ha:
+                med = float(r["superficie_sembrada_ha"].median())
+                if not np.isfinite(med) or med < superficie_minima_ha:
+                    continue
+            anios = r["anio"].to_numpy(int)
+            y = r["rendimiento_kgxha"].to_numpy(float)
+            esp = analisis.tendencia(anios.astype(float), y, metodo_tendencia)
+            with np.errstate(divide="ignore", invalid="ignore"):
+                desvio = 100 * (y - esp) / esp
+            oni = np.array([oni_de.get(int(a), np.nan) for a in anios], dtype=float)
+            ok = np.isfinite(desvio) & np.isfinite(oni)
+            if not ok.any():
+                continue
+            filas.append(pd.DataFrame({
+                "departamento_id": dep,
+                "anio": anios[ok],
+                "oni": oni[ok],
+                "desvio_pct": desvio[ok],
+                "fase": [fase_de.get(int(a), "sin dato") for a in anios[ok]],
+            }))
+        if not filas:
+            raise SinDatos(f"Sin campanias para {cultivo} con estos filtros")
+        return pd.concat(filas, ignore_index=True)
+
+
+    def consulta_dispersion(self, cultivo: str, **kw) -> dict:
+        """Payload listo para el scatter y el boxplot, con su ajuste lineal."""
+        d = self.dispersion(cultivo, **kw)
+        oni = d["oni"].to_numpy(float)
+        des = d["desvio_pct"].to_numpy(float)
+        idx = {f: i for i, f in enumerate(FASES)}
+        # La recta es un ajuste simple, no un modelo: sirve para ver el signo
+        # y la magnitud de la relacion, y sobre todo para que se note lo poco
+        # que explica. r2 suele quedar por debajo de 0,1.
+        b, a = np.polyfit(oni, des, 1)
+        r = float(np.corrcoef(oni, des)[0, 1])
+        return {
+            "cultivo": str(d["_nombre_cultivo"].iloc[0]) if "_nombre_cultivo" in d
+                       else cultivo,
+            "n": int(len(d)),
+            "partidos": int(d["departamento_id"].nunique()),
+            "oni": [round(float(x), 2) for x in oni],
+            "desvio": [round(float(x), 1) for x in des],
+            "fase": [idx.get(f, 1) for f in d["fase"]],
+            "fases_orden": FASES,
+            "ajuste": {"pendiente": round(float(b), 2),
+                       "ordenada": round(float(a), 2),
+                       "r": round(r, 3), "r2": round(r * r, 3)},
+            "caja": [{"fase": f, **caja(des[d["fase"].to_numpy() == f])}
+                     for f in FASES],
+        }
 
     # -- ENSO --------------------------------------------------------------
 

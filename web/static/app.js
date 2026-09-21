@@ -23,8 +23,8 @@ const SVGNS = "http://www.w3.org/2000/svg";
 const FASES = ["Nina", "Neutro", "Nino"];
 const COLOR_FASE = { Nina: "var(--nina)", Neutro: "var(--neutro)", Nino: "var(--nino)" };
 
-const estado = { analisis: null, ranking: null, cultivos: [], meta: null,
-                 geo: null, nombres: new Map() };
+const estado = { analisis: null, ranking: null, dispersion: null,
+                 cultivos: [], meta: null, geo: null, nombres: new Map() };
 
 // --------------------------------------------------------------------------
 // utilidades
@@ -424,6 +424,133 @@ function leyendaMapa(nodo, fase) {
     `<div class="fila" style="margin-top:7px"><i class="chip" style="background:var(--mapa-sin)"></i>sin serie suficiente</div>`;
 }
 
+
+// --------------------------------------------------------------------------
+// scatter ONI x desvio + boxplot por fase, con eje Y compartido
+// --------------------------------------------------------------------------
+
+/** Circulo como subtrazo de un path compuesto.
+ *
+ *  Son ~8.000 puntos: un <circle> por cada uno hincha el DOM y el navegador
+ *  se arrastra al redibujar. Tres paths compuestos —uno por fase— dibujan lo
+ *  mismo y el color sigue codificando la fase.
+ */
+function circuloPath(cx, cy, r) {
+  return `M${(cx - r).toFixed(1)},${cy.toFixed(1)}`
+    + `a${r},${r} 0 1,0 ${2 * r},0a${r},${r} 0 1,0 ${-2 * r},0Z`;
+}
+
+function graficoDispersion(svg, d) {
+  const W = svg.clientWidth || svg.parentNode.clientWidth || 860;
+  const H = 400;
+  const M = { t: 16, r: 14, b: 48, l: 52 };
+  // El boxplot ocupa una franja fija a la derecha: son tres cajas, no necesita
+  // mas, y el scatter aprovecha todo lo demas.
+  const anchoCaja = Math.min(200, Math.max(130, W * 0.26));
+  const sep = 26;
+  const pwS = W - M.l - M.r - anchoCaja - sep;
+  const ph = H - M.t - M.b;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("height", H);
+  svg.replaceChildren();
+  if (!d || !d.n) return;
+
+  // Escala Y COMPARTIDA por los dos paneles: es lo que permite leerlos juntos.
+  // Se recorta a los percentiles 1 y 99 para que un punado de campanias
+  // catastroficas no aplaste el resto de la nube contra el cero.
+  const ys = d.desvio.slice().sort((a, b) => a - b);
+  const q = (p) => ys[Math.min(ys.length - 1, Math.floor(p * ys.length))];
+  const lim = Math.max(Math.abs(q(0.01)), Math.abs(q(0.99))) * 1.08;
+  const y = (v) => M.t + ph * (1 - (v + lim) / (2 * lim));
+
+  const xs = d.oni;
+  const xlo = Math.min(...xs) - 0.15, xhi = Math.max(...xs) + 0.15;
+  const x = (v) => M.l + pwS * (v - xlo) / (xhi - xlo);
+
+  const g = el("g");
+
+  // grilla horizontal, comun a los dos paneles
+  for (const t of ticks(-lim, lim, 6)) {
+    g.appendChild(el("line", { class: t === 0 ? "cero" : "grilla",
+      x1: M.l, x2: W - M.r, y1: y(t), y2: y(t) }));
+    g.appendChild(texto(M.l - 8, y(t) + 4, firmado(t, 0) + "%", "eje-txt",
+      { "text-anchor": "end" }));
+  }
+
+  // -- panel izquierdo: la nube ------------------------------------------
+  const porFase = d.fases_orden.map(() => []);
+  for (let i = 0; i < d.oni.length; i++) {
+    if (Math.abs(d.desvio[i]) > lim) continue;      // recortado por la escala
+    porFase[d.fase[i]].push(circuloPath(x(d.oni[i]), y(d.desvio[i]), 2.4));
+  }
+  d.fases_orden.forEach((f, i) => {
+    if (!porFase[i].length) return;
+    g.appendChild(el("path", { class: "nube", d: porFase[i].join(""),
+                               fill: COLOR_FASE[f] }));
+  });
+
+  // recta de ajuste: no es un modelo, es para ver el signo y lo poco que explica
+  const a0 = d.ajuste.ordenada + d.ajuste.pendiente * xlo;
+  const a1 = d.ajuste.ordenada + d.ajuste.pendiente * xhi;
+  g.appendChild(el("path", { class: "ajuste",
+    d: `M${x(xlo)},${y(Math.max(-lim, Math.min(lim, a0)))}`
+       + `L${x(xhi)},${y(Math.max(-lim, Math.min(lim, a1)))}`,
+    stroke: "var(--texto)", opacity: .55 }));
+
+  for (const t of ticks(xlo, xhi, 6)) {
+    g.appendChild(texto(x(t), H - M.b + 20, firmado(t, 1), "eje-txt",
+      { "text-anchor": "middle" }));
+  }
+  g.appendChild(texto(M.l + pwS / 2, H - M.b + 40,
+    "ONI medio de la ventana de la campania", "eje-titulo",
+    { "text-anchor": "middle" }));
+  g.appendChild(texto(M.l - 40, M.t + ph / 2,
+    "desvio del rinde contra su tendencia (%)", "eje-titulo",
+    { "text-anchor": "middle", transform: `rotate(-90 ${M.l - 40} ${M.t + ph / 2})` }));
+
+  // -- panel derecho: las cajas -------------------------------------------
+  const x0 = M.l + pwS + sep;
+  g.appendChild(el("line", { class: "panel-sep",
+    x1: x0 - sep / 2, x2: x0 - sep / 2, y1: M.t, y2: M.t + ph }));
+
+  const cajas = d.fases_orden.map((f) => d.caja.find((c) => c.fase === f))
+    .filter((c) => c && c.n);
+  const paso = anchoCaja / Math.max(1, cajas.length);
+  const ancho = Math.min(46, paso * 0.56);
+
+  cajas.forEach((c, i) => {
+    const cx = x0 + paso * (i + 0.5);
+    const col = COLOR_FASE[c.fase];
+    // bigotes
+    g.appendChild(el("line", { class: "bigote", stroke: col,
+      x1: cx, x2: cx, y1: y(c.bigote_inf), y2: y(c.bigote_sup), opacity: .7 }));
+    for (const v of [c.bigote_inf, c.bigote_sup]) {
+      g.appendChild(el("line", { class: "bigote", stroke: col, opacity: .7,
+        x1: cx - ancho / 4, x2: cx + ancho / 4, y1: y(v), y2: y(v) }));
+    }
+    // caja
+    const rect = el("rect", { class: "caja-borde", stroke: col, fill: col,
+      x: cx - ancho / 2, width: ancho,
+      y: y(c.q3), height: Math.max(1, y(c.q1) - y(c.q3)), rx: 3 });
+    hover(rect, c.fase, c.fase, [
+      ["Campanias", c.n],
+      ["Mediana", firmado(c.mediana) + " %"],
+      ["Rango intercuartil", `${firmado(c.q1)} a ${firmado(c.q3)} %`],
+      ["Bigotes (1,5 RIC)", `${firmado(c.bigote_inf)} a ${firmado(c.bigote_sup)} %`],
+      ["Fuera de bigotes", c.atipicos],
+    ]);
+    g.appendChild(rect);
+    g.appendChild(el("line", { class: "caja-mediana", stroke: col,
+      x1: cx - ancho / 2, x2: cx + ancho / 2, y1: y(c.mediana), y2: y(c.mediana) }));
+    g.appendChild(texto(cx, H - M.b + 20, c.fase, "etiqueta",
+      { "text-anchor": "middle" }));
+    g.appendChild(texto(cx, H - M.b + 34, `n=${c.n}`, "eje-txt",
+      { "text-anchor": "middle" }));
+  });
+
+  svg.appendChild(g);
+}
+
 // --------------------------------------------------------------------------
 // tablas
 // --------------------------------------------------------------------------
@@ -575,6 +702,9 @@ async function consultarRanking() {
       await cargarGeo();
       graficoMapa($("#g-mapa"), estado.geo, d.mapa, d.fase, estado.nombres);
     }
+    // La nube va aparte y despues: el mapa es lo que se mira primero, y esta
+    // consulta trae ~8.000 puntos. Si falla, el mapa ya esta en pantalla.
+    cargarDispersion();
   } catch (e) {
     $("#r-estado").className = "estado error";
     $("#r-estado").textContent = e.message;
@@ -584,6 +714,47 @@ async function consultarRanking() {
 // --------------------------------------------------------------------------
 // carga de catalogos
 // --------------------------------------------------------------------------
+
+/** Nube de puntos del cultivo elegido. Usa los mismos filtros que el mapa,
+ *  salvo la fase: el scatter y el boxplot muestran las tres a la vez, que es
+ *  justamente para lo que sirven. */
+async function cargarDispersion() {
+  const cultivo = $("#r-cultivo").value;
+  if (!cultivo) return;
+  try {
+    const d = await api("/api/dispersion", {
+      cultivo,
+      provincia: $("#r-provincia").value,
+      desde: $("#r-desde").value,
+      superficie_minima_ha: $("#r-superficie").value,
+    });
+    estado.dispersion = d;
+    $("#d-titulo").textContent =
+      `${cultivo}: ONI contra desvio del rinde, campania por campania`;
+    $("#d-ajuste").textContent =
+      `recta de ajuste: ${firmado(d.ajuste.pendiente)} % de rinde por punto de `
+      + `ONI · r² ${num(d.ajuste.r2, 3)} · ${d.n.toLocaleString("es-AR")} `
+      + `campanias de ${d.partidos} partidos`;
+    tabla($("#t-caja"), [
+      { tit: "Fase", txt: true,
+        fmt: (f) => `<i class="punto f-${f.fase}"></i> ${f.fase}` },
+      { tit: "Campanias", fmt: (f) => f.n },
+      { tit: "Mediana %", fmt: (f) => firmado(f.mediana) },
+      { tit: "Media %", fmt: (f) => firmado(f.media) },
+      { tit: "q1 %", fmt: (f) => firmado(f.q1) },
+      { tit: "q3 %", fmt: (f) => firmado(f.q3) },
+      { tit: "Bigote inf %", fmt: (f) => firmado(f.bigote_inf) },
+      { tit: "Bigote sup %", fmt: (f) => firmado(f.bigote_sup) },
+      { tit: "Fuera de bigotes", fmt: (f) => f.atipicos },
+    ], d.fases_orden.map((x) => d.caja.find((c) => c.fase === x))
+        .filter((c) => c && c.n));
+    graficoDispersion($("#g-dispersion"), d);
+  } catch (e) {
+    estado.dispersion = null;
+    $("#d-titulo").textContent = "No se pudo calcular la nube de puntos";
+    $("#d-ajuste").textContent = e.message;
+  }
+}
 
 /** El geojson son ~500 KB: se baja una sola vez, la primera que hace falta.
  *  Si falla, el ranking y la tabla siguen funcionando sin mapa. */
@@ -701,6 +872,9 @@ function redibujar() {
       graficoMapa($("#g-mapa"), estado.geo, estado.ranking.mapa,
                   estado.ranking.fase, estado.nombres);
     }
+    if (estado.dispersion) {
+      graficoDispersion($("#g-dispersion"), estado.dispersion);
+    }
   }
 }
 
@@ -749,7 +923,24 @@ function init() {
   $("#btn-csv-res").onclick = () => descargar("resumen");
 
   let t;
-  addEventListener("resize", () => { clearTimeout(t); t = setTimeout(redibujar, 120); });
+  const pedirRedibujo = () => { clearTimeout(t); t = setTimeout(redibujar, 120); };
+  addEventListener("resize", pedirRedibujo);
+
+  // Los graficos se dimensionan segun el ancho de su tarjeta. Si la pagina
+  // carga con el contenedor en cero —pestania de fondo, panel plegado,
+  // ventana minimizada— salen dibujados en miniatura y ahi se quedan, porque
+  // el evento `resize` de window nunca llega: lo que cambio fue la tarjeta,
+  // no la ventana. El observer redibuja cuando la tarjeta recupera ancho.
+  //
+  // Observa las TARJETAS, no los <svg>: redibujar cambia el tamanio del svg y
+  // observarlo a el realimentaria el bucle. El ancho de la tarjeta lo fija el
+  // layout, asi que no depende de lo que haya adentro.
+  if (window.ResizeObserver) {
+    const ro = new ResizeObserver((entradas) => {
+      if (entradas.some((e) => e.contentRect.width > 0)) pedirRedibujo();
+    });
+    for (const c of $$(".tarjeta")) ro.observe(c);
+  }
 
   cargarEnso();
   cargarMeta();
