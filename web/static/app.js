@@ -408,7 +408,10 @@ function graficoMapa(svg, geo, mapa, fase, nombres) {
     hover(p, nombres.get(id) || id, null, [
       [`Campanias en ${fase}`, r[3]],
       ["Desvio mediano", firmado(r[1]) + " %"],
-      ["Campanias bajo umbral", num(r[2], 0) + " %"],
+      // El umbral ya no es un control de esta vista: la API usa su default
+      // de -15 %. Sin el selector, "bajo umbral" no le dice nada a nadie, asi
+      // que el rotulo nombra el corte.
+      ["Campanias con caida mayor a 15 %", num(r[2], 0) + " %"],
     ]);
     gCon.appendChild(p);
   }
@@ -696,7 +699,6 @@ async function consultarRanking() {
       fase: $("#r-fase").value,
       provincia: $("#r-provincia").value,
       desde: $("#r-desde").value,
-      umbral: $("#r-umbral").value,
       superficie_minima_ha: $("#r-superficie").value,
     });
     estado.ranking = d;
@@ -928,7 +930,7 @@ function init() {
     alCambiar(s, consultarPartido);
   }
   for (const s of ["#r-cultivo", "#r-fase", "#r-provincia", "#r-desde",
-                   "#r-umbral", "#r-superficie"]) {
+                   "#r-superficie"]) {
     alCambiar(s, consultarRanking);
   }
   $("#btn-csv-camp").onclick = () => descargar("campanias");
