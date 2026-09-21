@@ -97,12 +97,11 @@ En `http://localhost:8000`. Dos vistas:
   tendencia, coloreada por fase; la diferencia de medianas por fase con IC 90 %;
   el ranking de sensibilidad climática; y las advertencias metodológicas que
   corresponden a *ese* resultado. Descargable en CSV.
-- **Ranking de partidos** — para un cultivo y una fase: un **mapa
-  departamental** con los 483 partidos pintados por cuánto se desvía su rinde,
-  y debajo el ranking ordenado. Las dos vistas salen de **la misma consulta**,
-  así que muestran exactamente los mismos números y comparten la escala de
-  color. El encuadre del mapa se ajusta solo a la zona donde el cultivo tiene
-  serie: para maíz abarca de Salta a Río Negro, para caña se va al NOA.
+- **Mapa por partido** (la vista que abre) — para un cultivo y una fase, los
+  483 partidos pintados por cuánto se desvía su rinde. El encuadre se ajusta
+  solo a la zona donde el cultivo tiene serie: para maíz abarca de Salta a Río
+  Negro, para caña se va al NOA. Arranca con maíz ya elegido, así lo primero
+  que se ve es el mapa dibujado y no un selector vacío.
 
 La API está documentada sola en `/docs`. Los endpoints útiles:
 

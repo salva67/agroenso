@@ -425,80 +425,6 @@ function leyendaMapa(nodo, fase) {
 }
 
 // --------------------------------------------------------------------------
-// grafico 3: ranking de partidos
-// --------------------------------------------------------------------------
-
-function graficoRanking(svg, filas, fase) {
-  const W = svg.clientWidth || svg.parentNode.clientWidth || 860;
-  const M = { t: 12, r: 60, b: 38, l: 176 };
-  // Fila de 24px con barra de 13: el resto es aire. Veinticinco bloques
-  // saturados de 20px de alto pegados uno al otro leen como una mancha; la
-  // marca fina deja ver el largo, que es el dato.
-  const alto = 24, grosor = 13;
-  const H = M.t + M.b + filas.length * alto;
-  const pw = W - M.l - M.r;
-  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
-  svg.setAttribute("height", H);
-  svg.replaceChildren();
-  if (!filas.length) return;
-
-  const vals = filas.map((f) => f.desvio_mediano_pct);
-  const lo = Math.min(...vals, 0), hi = Math.max(...vals, 0);
-  const pad = (hi - lo || 10) * 0.08;
-  const x = (v) => M.l + pw * (v - lo + pad) / (hi - lo + 2 * pad);
-  const g = el("g");
-
-  for (const t of ticks(lo - pad, hi + pad, 6)) {
-    g.appendChild(el("line", {
-      class: t === 0 ? "cero" : "grilla",
-      x1: x(t), x2: x(t), y1: M.t, y2: M.t + filas.length * alto,
-    }));
-    g.appendChild(texto(x(t), H - M.b + 20, firmado(t, 0) + "%", "eje-txt",
-      { "text-anchor": "middle" }));
-  }
-
-  // Las barras se pintan con la MISMA escala que el mapa, no con el color de
-  // la fase. Mapa y ranking son la misma medida sobre los mismos partidos:
-  // si cada uno usara su propio color serian dos sistemas que hay que
-  // aprender por separado. La fase ya la dice el titulo.
-
-  filas.forEach((f, i) => {
-    const y0 = M.t + i * alto + (alto - grosor) / 2;
-    const h = grosor;
-    const desde = Math.min(x(0), x(f.desvio_mediano_pct));
-    const hasta = Math.max(x(0), x(f.desvio_mediano_pct));
-    const negativo = f.desvio_mediano_pct < 0;
-    const rr = Math.min(4, (hasta - desde) / 2, h / 2);
-    const d = negativo
-      ? `M${hasta},${y0}H${desde + rr}a${rr},${rr} 0 0 0 ${-rr},${rr}v${h - 2 * rr}a${rr},${rr} 0 0 0 ${rr},${rr}H${hasta}Z`
-      : `M${desde},${y0}H${hasta - rr}a${rr},${rr} 0 0 1 ${rr},${rr}v${h - 2 * rr}a${rr},${rr} 0 0 1 ${-rr},${rr}H${desde}Z`;
-
-    const p = el("path", { class: "barra", d,
-                           fill: colorDe(f.desvio_mediano_pct) });
-    hover(p, `${f.departamento} — ${f.provincia}`, null, [
-      [`Campanias en ${fase}`, `${f.campanias_fase} de ${f.campanias_total}`],
-      ["Desvio mediano", firmado(f.desvio_mediano_pct) + " %"],
-      ["Percentil 10", firmado(f.p10_pct) + " %"],
-      ["Campanias bajo umbral", num(f.frec_siniestro_pct, 0) + " %"],
-      ["Dif. vs otras fases", firmado(f.dif_vs_otras_fases) + " %"],
-      ["Superficie mediana", ent(f.superficie_med_ha) + " ha"],
-    ]);
-    g.appendChild(p);
-
-    g.appendChild(texto(M.l - 10, y0 + h / 2 + 4, f.departamento, "etiqueta",
-      { "text-anchor": "end" }));
-    g.appendChild(texto((negativo ? desde - 8 : hasta + 8), y0 + h / 2 + 4,
-      firmado(f.desvio_mediano_pct, 0) + "%", "eje-txt",
-      { "text-anchor": negativo ? "end" : "start" }));
-  });
-
-  g.appendChild(texto(M.l, H - 6,
-    "desvio mediano del rinde respecto de su tendencia, en campanias de esa fase",
-    "eje-titulo"));
-  svg.appendChild(g);
-}
-
-// --------------------------------------------------------------------------
 // tablas
 // --------------------------------------------------------------------------
 
@@ -633,7 +559,6 @@ async function consultarRanking() {
       desde: $("#r-desde").value,
       umbral: $("#r-umbral").value,
       superficie_minima_ha: $("#r-superficie").value,
-      limite: $("#r-limite").value,
     });
     estado.ranking = d;
     $("#m-titulo").textContent = `${d.cultivo} por partido — fase ${d.fase}`;
@@ -644,29 +569,12 @@ async function consultarRanking() {
       ? `${d.mapa.length} partidos medidos. Pasar el mouse por encima para ver `
         + `el valor exacto; el detalle campania a campania esta en la otra pestania.`
       : "Esta version de la API no devuelve datos para el mapa.";
-    $("#r-titulo").textContent =
-      `${d.cultivo} en ${d.fase}: los partidos donde mas se cae el rinde`;
-    $("#r-sub").textContent =
-      `${d.partidos_evaluados} partidos con al menos ${d.parametros.minimo_campanias} ` +
-      `campanias desde ${d.parametros.desde}. Ordenado por desvio mediano. ` +
-      `Sin intervalo de confianza por partido: para eso, abrir el partido en la otra pestania.`;
     $("#r-estado").hidden = true;
     $("#r-contenido").hidden = false;
     if (d.mapa) {
       await cargarGeo();
       graficoMapa($("#g-mapa"), estado.geo, d.mapa, d.fase, estado.nombres);
     }
-    graficoRanking($("#g-ranking"), d.ranking, d.fase);
-    tabla($("#t-ranking"), [
-      { tit: "Partido", txt: true, fmt: (f) => f.departamento },
-      { tit: "Provincia", txt: true, fmt: (f) => f.provincia },
-      { tit: "Camp. fase", fmt: (f) => f.campanias_fase },
-      { tit: "Desvio mediano %", fmt: (f) => firmado(f.desvio_mediano_pct) },
-      { tit: "p10 %", fmt: (f) => firmado(f.p10_pct) },
-      { tit: "Bajo umbral %", fmt: (f) => num(f.frec_siniestro_pct, 0) },
-      { tit: "Dif. vs otras %", fmt: (f) => firmado(f.dif_vs_otras_fases) },
-      { tit: "Sup. med. ha", fmt: (f) => ent(f.superficie_med_ha) },
-    ], d.ranking);
   } catch (e) {
     $("#r-estado").className = "estado error";
     $("#r-estado").textContent = e.message;
@@ -793,7 +701,6 @@ function redibujar() {
       graficoMapa($("#g-mapa"), estado.geo, estado.ranking.mapa,
                   estado.ranking.fase, estado.nombres);
     }
-    graficoRanking($("#g-ranking"), estado.ranking.ranking, estado.ranking.fase);
   }
 }
 
@@ -835,7 +742,7 @@ function init() {
     $(s).onchange = consultarPartido;
   }
   for (const s of ["#r-cultivo", "#r-fase", "#r-provincia", "#r-desde",
-                   "#r-umbral", "#r-superficie", "#r-limite"]) {
+                   "#r-umbral", "#r-superficie"]) {
     $(s).onchange = consultarRanking;
   }
   $("#btn-csv-camp").onclick = () => descargar("campanias");
