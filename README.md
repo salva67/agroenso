@@ -259,7 +259,7 @@ python verificar.py http://localhost:8000    # contra el contenedor
 python verificar.py https://mi-deploy.dev    # contra el deploy
 ```
 
-58 chequeos. No compara contra números fijos —el snapshot cambia todos los
+71 chequeos. No compara contra números fijos —el snapshot cambia todos los
 meses y un test así se rompe solo—: valida invariantes. Que las fases sumen
 las campañas, que los percentiles estén ordenados, que la clasificación
 respete el umbral del CPC, que el detrend no deje sesgo, que no se escape un
@@ -348,6 +348,19 @@ lo chequea y falla si alguno se pierde.
   variabilidad. `oni_medio` suele quedar último en el ranking de
   sensibilidad: actúa sobre el rinde a través de la lluvia y la temperatura,
   no directamente.
+
+### Los estáticos van versionados
+
+El HTML se sirve con `no-cache` y referencia `app.js` y `estilo.css` con una
+huella del contenido en la URL (`?v=…`). No es una optimización: sin eso, un
+deploy que toca el HTML y el JS a la vez deja al visitante con el **JS viejo y
+el HTML nuevo**. El JS busca elementos que ya no existen, revienta en la
+inicialización y la página queda cargando para siempre, sin error visible.
+Pasó de verdad al sacar un selector del HTML.
+
+Con la huella, un estático que cambió es una URL distinta y el navegador lo
+baja; uno que no cambió conserva su caché. El verificador chequea que el HTML
+salga versionado.
 
 ### Versiones fijas, y por qué
 

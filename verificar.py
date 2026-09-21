@@ -261,6 +261,42 @@ def main(argv):
             check(isinstance(d, dict) and d.get("detail"),
                   f"{que}: el 404 salio sin explicacion")
 
+        # -- el HTML y sus estaticos --------------------------------------
+        # Un JS cacheado junto a un HTML nuevo deja la pagina cargando para
+        # siempre: el JS viejo busca elementos que el HTML ya no tiene y muere
+        # en la inicializacion. La huella en la URL es lo que lo evita.
+        cod, html = cli.get("/")
+        check(cod == 200, f"la raiz devolvio {cod}")
+        if cod == 200 and isinstance(html, str):
+            check("/static/app.js?v=" in html,
+                  "el HTML no versiona app.js: un cache viejo rompe la pagina")
+            check("/static/estilo.css?v=" in html,
+                  "el HTML no versiona estilo.css")
+            check("g-mapa" in html, "el HTML no trae el contenedor del mapa")
+            check("g-dispersion" in html,
+                  "el HTML no trae el contenedor del scatter/boxplot")
+
+        # -- dispersion --------------------------------------------------------
+        cod, dsp = cli.get("/api/dispersion", cultivo="maiz", desde=1980,
+                           superficie_minima_ha=3000)
+        check(cod == 200, f"/api/dispersion devolvio {cod}: {dsp}")
+        if cod == 200:
+            n = dsp["n"]
+            check(len(dsp["oni"]) == n and len(dsp["desvio"]) == n
+                  and len(dsp["fase"]) == n,
+                  "los arrays paralelos de la nube no tienen el mismo largo")
+            check(all(0 <= f < len(dsp["fases_orden"]) for f in dsp["fase"]),
+                  "hay indices de fase fuera de rango")
+            check(sum(c["n"] for c in dsp["caja"] if c.get("n")) == n,
+                  "las cajas no suman el total de puntos de la nube")
+            for c in dsp["caja"]:
+                if not c.get("n"):
+                    continue
+                check(c["bigote_inf"] <= c["q1"] <= c["mediana"] <= c["q3"]
+                      <= c["bigote_sup"],
+                      f"boxplot desordenado en {c['fase']}")
+            check(not sin_nan(dsp["ajuste"]), "el ajuste trae NaN")
+
         # -- descarga ---------------------------------------------------------
         cod, csv = cli.get("/api/analisis.csv", departamento_id="06721",
                            cultivo="maiz", tabla="resumen")

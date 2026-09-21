@@ -13,6 +13,7 @@ diagnosticar que una que se niega a arrancar diciendo que falta el ETL.
 
 from __future__ import annotations
 
+import hashlib
 import io
 import math
 import os
@@ -481,12 +482,42 @@ def dispersion(cultivo: str,
 # Frontend
 # ---------------------------------------------------------------------------
 
+def _version_estaticos() -> str:
+    """Huella del contenido de los estaticos, para cortar el cache.
+
+    El navegador guarda `app.js` y `estilo.css` y los reusa aunque el HTML
+    cambie. Con un deploy que toca los dos, eso deja al visitante con el JS
+    viejo y el HTML nuevo: el JS busca elementos que ya no existen, revienta
+    en la inicializacion y la pagina queda cargando para siempre. Paso de
+    verdad al sacar un selector del HTML.
+
+    Con la huella en la URL, un estatico que cambio es una URL distinta y el
+    navegador lo baja si o si; uno que no cambio conserva su cache.
+    """
+    h = hashlib.sha1()
+    for n in sorted(os.listdir(ESTATICO)) if os.path.isdir(ESTATICO) else []:
+        r = os.path.join(ESTATICO, n)
+        if os.path.isfile(r):
+            st = os.stat(r)
+            h.update(f"{n}{st.st_size}{st.st_mtime_ns}".encode())
+    return h.hexdigest()[:10]
+
+
+VERSION_ESTATICOS = _version_estaticos()
+
+
 @app.get("/", include_in_schema=False)
 def raiz():
     idx = os.path.join(ESTATICO, "index.html")
     if not os.path.exists(idx):
         return JSONResponse({"agroenso": "API viva", "docs": "/docs"})
-    return FileResponse(idx)
+    with open(idx, encoding="utf-8") as f:
+        html = f.read()
+    html = (html.replace("/static/app.js", f"/static/app.js?v={VERSION_ESTATICOS}")
+                .replace("/static/estilo.css", f"/static/estilo.css?v={VERSION_ESTATICOS}"))
+    # El HTML nunca se cachea: es lo que trae la version de los demas.
+    return Response(html, media_type="text/html; charset=utf-8",
+                    headers={"Cache-Control": "no-cache, must-revalidate"})
 
 
 if os.path.isdir(ESTATICO):

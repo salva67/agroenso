@@ -17,6 +17,18 @@
 "use strict";
 
 const $ = (s) => document.querySelector(s);
+
+/** Engancha un handler solo si el elemento existe.
+ *
+ *  Sin esto, un solo id que cambie de nombre entre el HTML y este archivo
+ *  tira una excepcion en `init()`, corta la inicializacion entera y deja la
+ *  pagina cargando sin decir por que. Falta un control, no la app.
+ */
+function alCambiar(sel, fn) {
+  const e = $(sel);
+  if (e) e.onchange = fn;
+  else console.warn("agroenso: no existe el control", sel);
+}
 const $$ = (s) => Array.from(document.querySelectorAll(s));
 const SVGNS = "http://www.w3.org/2000/svg";
 
@@ -913,11 +925,11 @@ function init() {
     consultarPartido();
   };
   for (const s of ["#f-cultivo", "#f-desde", "#f-umbral", "#f-tendencia"]) {
-    $(s).onchange = consultarPartido;
+    alCambiar(s, consultarPartido);
   }
   for (const s of ["#r-cultivo", "#r-fase", "#r-provincia", "#r-desde",
                    "#r-umbral", "#r-superficie"]) {
-    $(s).onchange = consultarRanking;
+    alCambiar(s, consultarRanking);
   }
   $("#btn-csv-camp").onclick = () => descargar("campanias");
   $("#btn-csv-res").onclick = () => descargar("resumen");
