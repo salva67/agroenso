@@ -766,6 +766,11 @@ async function cargarCatalogoCultivos() {
 // arranque
 // --------------------------------------------------------------------------
 
+// Cultivo con el que arranca el mapa. Que la vista principal pida elegir algo
+// antes de mostrar nada hacia que la app pareciera no tener mapa: se abria en
+// la otra pestania y esta quedaba en blanco hasta el segundo clic.
+const CULTIVO_INICIAL = "maiz";
+
 function pestania(cual) {
   const esPartido = cual === "partido";
   $("#tab-partido").setAttribute("aria-selected", String(esPartido));
@@ -790,6 +795,20 @@ function redibujar() {
     }
     graficoRanking($("#g-ranking"), estado.ranking.ranking, estado.ranking.fase);
   }
+}
+
+/** Deja elegido un cultivo razonable y dispara la primera consulta. */
+async function arranqueMapa() {
+  const sel = $("#r-cultivo");
+  const hay = Array.from(sel.options).map((o) => o.value);
+  const elegido = hay.includes(CULTIVO_INICIAL) ? CULTIVO_INICIAL
+    : hay.find((v) => v) || "";
+  if (!elegido) {
+    $("#r-estado").textContent = "El snapshot no trae cultivos con serie suficiente.";
+    return;
+  }
+  sel.value = elegido;
+  await consultarRanking();
 }
 
 function descargar(tipo) {
@@ -828,8 +847,10 @@ function init() {
   cargarEnso();
   cargarMeta();
   cargarProvincias();
-  cargarCatalogoCultivos();
   cargarNombres();
+  // El mapa se dibuja solo al abrir: nombres primero (los necesita el
+  // tooltip), despues el catalogo, y arranca la consulta sin esperar clics.
+  cargarCatalogoCultivos().then(arranqueMapa);
 }
 
 init();

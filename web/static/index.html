@@ -37,12 +37,12 @@
 <main class="envoltura">
 
   <div class="pestanias" role="tablist">
-    <button role="tab" id="tab-partido" aria-selected="true" aria-controls="vista-partido">Un partido</button>
-    <button role="tab" id="tab-ranking" aria-selected="false" aria-controls="vista-ranking">Ranking de partidos</button>
+    <button role="tab" id="tab-ranking" aria-selected="true" aria-controls="vista-ranking">Mapa por partido</button>
+    <button role="tab" id="tab-partido" aria-selected="false" aria-controls="vista-partido">Analizar un partido</button>
   </div>
 
   <!-- ================= VISTA PARTIDO ================= -->
-  <section id="vista-partido" role="tabpanel" aria-labelledby="tab-partido">
+  <section id="vista-partido" role="tabpanel" aria-labelledby="tab-partido" hidden>
 
     <div class="filtros">
       <div class="campo">
@@ -127,7 +127,7 @@
   </section>
 
   <!-- ================= VISTA RANKING ================= -->
-  <section id="vista-ranking" role="tabpanel" aria-labelledby="tab-ranking" hidden>
+  <section id="vista-ranking" role="tabpanel" aria-labelledby="tab-ranking">
 
     <div class="filtros">
       <div class="campo">
@@ -168,7 +168,7 @@
       </div>
     </div>
 
-    <div id="r-estado" class="estado">Elegi un cultivo y una fase.</div>
+    <div id="r-estado" class="estado">Cargando el mapa…</div>
 
     <div id="r-contenido" hidden>
       <div class="tarjeta">
