@@ -42,6 +42,38 @@ CACHE_MAX = 512
 MOTOR: consulta.Motor | None = None
 
 
+# Consulta con la que abre la web: el mapa se dibuja solo al entrar, asi que
+# esta combinacion se pide en cada primera visita. Tiene que coincidir con
+# CULTIVO_INICIAL y los valores por defecto de los filtros en app.js.
+PRECALENTAR = dict(cultivo="maiz", fase="Nina", desde=1980, umbral=-15.0,
+                   metodo_tendencia="movil", minimo_campanias=15,
+                   superficie_minima_ha=3000.0)
+
+
+def _precalentar():
+    """Deja lista en cache la consulta con la que abre la web.
+
+    El ranking recorre ~500 partidos y en una CPU completa tarda medio
+    segundo. En el plan gratuito de Render, que da 0,1 de CPU, eso se vuelve
+    varios segundos — y le toca al primer visitante, porque el mapa se dibuja
+    solo al entrar. Calcularlo en el arranque lo saca del camino del request:
+    el servicio tarda un poco mas en decir que esta listo, que es exactamente
+    donde hay que pagarlo.
+    """
+    try:
+        clave = ("rk", PRECALENTAR["cultivo"], PRECALENTAR["fase"],
+                 PRECALENTAR["desde"], PRECALENTAR["umbral"],
+                 PRECALENTAR["metodo_tendencia"], PRECALENTAR["minimo_campanias"],
+                 PRECALENTAR["superficie_minima_ha"])
+        _cache[clave] = MOTOR.ranking(**PRECALENTAR)
+        print(f"  precalentado: ranking de {PRECALENTAR['cultivo']} en "
+              f"{PRECALENTAR['fase']} ({len(_cache[clave])} partidos)", flush=True)
+    except Exception as e:                                    # noqa: BLE001
+        # Que falle el precalentado no puede impedir que la web levante: es
+        # una optimizacion, y la consulta se recalcula igual al pedirla.
+        print(f"  aviso: no se pudo precalentar ({e})", flush=True)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global MOTOR
@@ -49,6 +81,8 @@ async def lifespan(app: FastAPI):
     n = len(MOTOR.rindes)
     print(f"snapshot cargado: {n:,} filas, {len(MOTOR.partidos)} partidos, "
           f"clima={'si' if MOTOR.tiene_clima else 'no'}", flush=True)
+    if os.environ.get("AGROENSO_PRECALENTAR", "0") not in ("0", "", "false"):
+        _precalentar()
     yield
     MOTOR = None
 

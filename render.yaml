@@ -1,0 +1,28 @@
+# Render, plan gratuito. Sin tarjeta, 512 MB de RAM y 0,1 de CPU.
+#
+# Dos cosas dependen de esos limites y no son opcionales:
+#
+#   WEB_CONCURRENCY = 1. Cada worker carga su propio pandas + pyarrow + el
+#   snapshot: dos no entran en 512 MB y el servicio muere por OOM.
+#
+#   AGROENSO_PRECALENTAR = 1. Con 0,1 de CPU el ranking nacional pasa de
+#   medio segundo a varios, y el mapa es lo primero que se dibuja al abrir.
+#   Se calcula en el arranque, fuera del camino del request.
+#
+# El plan gratuito ademas DUERME el servicio tras 15 min sin trafico: la
+# primera visita despues de un rato espera 30-60 s a que levante. Es el
+# precio de no poner tarjeta.
+
+services:
+  - type: web
+    name: agroenso
+    runtime: docker
+    plan: free
+    region: oregon          # el free no tiene region en Sudamerica
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/salud
+    envVars:
+      - key: WEB_CONCURRENCY
+        value: "1"
+      - key: AGROENSO_PRECALENTAR
+        value: "1"

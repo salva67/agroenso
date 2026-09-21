@@ -221,8 +221,27 @@ Refrescar el dato = reconstruir la imagen. `.github/workflows/snapshot.yml` lo
 hace el día 8 de cada mes (el MAGYP publica mensualmente), verifica el contrato
 y deja el `clima.parquet` como artefacto para no recalcularlo.
 
-`fly.toml` está listo para Fly. Railway y Render detectan el Dockerfile solos y
-solo necesitan `PORT`.
+### Render (plan gratuito, sin tarjeta)
+
+`render.yaml` está listo. El plan gratuito da **512 MB de RAM y 0,1 de CPU**,
+y de ahí salen dos ajustes que no son opcionales:
+
+- **`WEB_CONCURRENCY=1`.** Cada worker carga su propio pandas + pyarrow + el
+  snapshot. Con uno solo el contenedor usa 176 MB de los 512 (verificado con
+  `docker run --memory 512m`); con dos no entra.
+- **`AGROENSO_PRECALENTAR=1`.** El ranking nacional recorre ~500 partidos y
+  tarda medio segundo a CPU completa — con 0,1 de CPU son varios segundos, y
+  le tocarían al primer visitante porque el mapa se dibuja solo al entrar. Se
+  calcula en el arranque: la primera consulta pasa de ~500 ms a 39 ms.
+
+El plan gratuito **duerme el servicio tras 15 min sin tráfico**; la primera
+visita después de un rato espera 30-60 s. Es el precio de no poner tarjeta.
+
+### Fly.io
+
+`fly.toml` está listo, con región Buenos Aires y una máquina siempre
+encendida. Da más RAM (512 MB reales con CPU completa) y no duerme, pero
+**Fly pide una tarjeta al crear la organización**, aun para uso gratuito.
 
 ### Verificación
 
