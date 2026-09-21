@@ -1,0 +1,7 @@
+# Dependencias del batch. Corre fuera del contenedor web (o en su etapa de
+# build) y es el unico que sale a internet.
+pandas>=2.0
+numpy>=1.24
+pyarrow>=14
+requests>=2.31
+pyyaml>=6.0

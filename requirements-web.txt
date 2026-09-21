@@ -1,0 +1,17 @@
+# Dependencias del proceso web. NO incluye matplotlib ni openpyxl: los
+# graficos los dibuja el navegador en SVG y la web no lee Excel. Sacarlos
+# baja la imagen ~120 MB y elimina la superficie de un parser de archivos
+# en un servicio expuesto.
+# Versiones FIJAS, no rangos abiertos. Con `pandas>=2.0` la imagen se armaba
+# contra lo que hubiera ese dia: local corria 2.3.3 y el contenedor se llevo
+# 3.0.6, que activa Copy-on-Write y rompio el detrend con un error que no se
+# veia en desarrollo. Un build de produccion tiene que ser reproducible.
+#
+# El codigo esta probado en las dos: 2.3.3 (entorno local) y 3.0.6 (imagen).
+# Para subir una version: cambiar el pin, `docker build`, y correr
+# `python verificar.py http://localhost:8099` contra el contenedor.
+pandas==3.0.6
+numpy==2.5.3
+pyarrow==25.0.1
+fastapi==0.141.1
+uvicorn[standard]==0.52.4

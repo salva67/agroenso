@@ -1,0 +1,10 @@
+# El cache crudo de descargas pesa cientos de MB y no va a la imagen: el ETL
+# del build baja lo que necesita, y el clima viaja ya agregado en el parquet.
+data/cache/
+salidas/
+__pycache__/
+**/__pycache__/
+*.pyc
+.claude/
+.git/
+polizas_*.csv

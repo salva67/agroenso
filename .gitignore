@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+data/cache/
+salidas/
+
+# El snapshot lo reconstruye `python -m etl.construir` en minutos, asi que no
+# va al repo... salvo el clima: ese tarda horas contra la cuota de Open-Meteo
+# y perderlo duele. Es el unico artefacto caro del pipeline.
+data/snapshot/*
+!data/snapshot/.gitkeep
+!data/snapshot/clima.parquet

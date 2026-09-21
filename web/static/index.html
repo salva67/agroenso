@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>agroenso — rinde por fase ENSO</title>
+<meta name="description" content="Rinde historico por partido cruzado contra la fase del ENSO, sobre la serie del MAGYP y el ONI de NOAA CPC.">
+<link rel="stylesheet" href="/static/estilo.css">
+<link rel="icon" href="data:,">
+</head>
+<body>
+
+<header class="principal">
+  <div class="envoltura">
+    <div class="marca">
+      <h1>agroenso</h1>
+      <p>Rinde historico por partido cruzado contra la fase del ENSO.
+         Serie del MAGYP, indice ONI de NOAA CPC, detrend tecnologico.</p>
+    </div>
+    <div class="enso-tile" id="enso-tile" hidden>
+      <div class="bloque">
+        <span class="rotulo">ONI observado</span>
+        <span class="cifra" id="enso-oni">—</span>
+        <span class="ayuda" id="enso-trim"></span>
+      </div>
+      <div class="bloque">
+        <span class="rotulo">Fase</span>
+        <span style="display:flex;align-items:center;gap:7px;font-size:16px;font-weight:600">
+          <i class="punto" id="enso-punto"></i><span id="enso-fase">—</span>
+        </span>
+        <span class="ayuda" id="enso-int"></span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="envoltura">
+
+  <div class="pestanias" role="tablist">
+    <button role="tab" id="tab-partido" aria-selected="true" aria-controls="vista-partido">Un partido</button>
+    <button role="tab" id="tab-ranking" aria-selected="false" aria-controls="vista-ranking">Ranking de partidos</button>
+  </div>
+
+  <!-- ================= VISTA PARTIDO ================= -->
+  <section id="vista-partido" role="tabpanel" aria-labelledby="tab-partido">
+
+    <div class="filtros">
+      <div class="campo">
+        <label for="f-provincia">Provincia</label>
+        <select id="f-provincia"><option value="">Cargando…</option></select>
+      </div>
+      <div class="campo">
+        <label for="f-partido">Partido</label>
+        <select id="f-partido"><option value="">—</option></select>
+      </div>
+      <div class="campo">
+        <label for="f-cultivo">Cultivo</label>
+        <select id="f-cultivo"><option value="">—</option></select>
+      </div>
+      <div class="campo">
+        <label for="f-desde">Desde</label>
+        <input type="number" id="f-desde" value="1980" min="1970" max="2010" step="1">
+      </div>
+      <div class="campo">
+        <label for="f-umbral">Umbral siniestro %</label>
+        <input type="number" id="f-umbral" value="-15" min="-90" max="0" step="5">
+      </div>
+      <div class="campo">
+        <label for="f-tendencia">Detrend</label>
+        <select id="f-tendencia">
+          <option value="movil">Media movil 11a</option>
+          <option value="lineal">Lineal</option>
+        </select>
+      </div>
+      <button class="accion" id="btn-csv-camp">CSV campanias</button>
+      <button class="accion" id="btn-csv-res">CSV resumen</button>
+    </div>
+
+    <div id="p-estado" class="estado">Elegi una provincia, un partido y un cultivo.</div>
+
+    <div id="p-contenido" hidden>
+      <div class="tiles" id="p-tiles"></div>
+
+      <div class="tarjeta">
+        <h2>Desvio del rinde respecto de su tendencia tecnologica</h2>
+        <p class="sub">Cada barra es una campania. El cero es el rinde que
+          <em>esperaba</em> la tendencia de ese partido, no el promedio historico:
+          sin ese detrend la comparacion entre fases termina midiendo en que
+          decada cayo cada una.</p>
+        <div class="leyenda">
+          <span><i class="punto f-Nina"></i>Nina (ONI &le; −0,5)</span>
+          <span><i class="punto f-Neutro"></i>Neutro</span>
+          <span><i class="punto f-Nino"></i>Nino (ONI &ge; +0,5)</span>
+          <span id="ley-umbral" style="color:var(--texto-3)"></span>
+        </div>
+        <svg class="grafico" id="g-campanias" role="img"></svg>
+        <details class="tabla-vista">
+          <summary>Ver la tabla de campanias</summary>
+          <div class="scrollable"><table class="datos" id="t-campanias"></table></div>
+        </details>
+      </div>
+
+      <div class="tarjeta">
+        <h2>Cuanto mueve la fase a la mediana, y con cuanta certeza</h2>
+        <p class="sub">Diferencia entre la mediana de la fase y la del resto de
+          las campanias, con intervalo de confianza del 90 % por bootstrap. Si la
+          barra cruza el cero, la serie no alcanza para afirmar que la fase mueve
+          el rinde medio — que es lo habitual con 15 campanias por fase.</p>
+        <svg class="grafico" id="g-fases" role="img"></svg>
+        <div class="scrollable" style="margin-top:12px">
+          <table class="datos" id="t-fases"></table>
+        </div>
+      </div>
+
+      <div class="tarjeta" id="c-sensibilidad" hidden>
+        <h2>Sensibilidad climatica</h2>
+        <p class="sub">Que variable de la ventana critica explica mejor el desvio.
+          No es un modelo: es un tamiz para ver cual merece entrar en uno.</p>
+        <div class="scrollable"><table class="datos" id="t-sensibilidad"></table></div>
+      </div>
+
+      <div class="tarjeta">
+        <h2>Lo que el numero no dice</h2>
+        <ul class="avisos" id="p-avisos"></ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= VISTA RANKING ================= -->
+  <section id="vista-ranking" role="tabpanel" aria-labelledby="tab-ranking" hidden>
+
+    <div class="filtros">
+      <div class="campo">
+        <label for="r-cultivo">Cultivo</label>
+        <select id="r-cultivo"><option value="">Cargando…</option></select>
+      </div>
+      <div class="campo">
+        <label for="r-fase">Fase</label>
+        <select id="r-fase">
+          <option value="Nina">Nina</option>
+          <option value="Nino">Nino</option>
+          <option value="Neutro">Neutro</option>
+        </select>
+      </div>
+      <div class="campo">
+        <label for="r-provincia">Provincia</label>
+        <select id="r-provincia"><option value="">Todas</option></select>
+      </div>
+      <div class="campo">
+        <label for="r-desde">Desde</label>
+        <input type="number" id="r-desde" value="1980" min="1970" max="2005" step="1">
+      </div>
+      <div class="campo">
+        <label for="r-umbral">Umbral siniestro %</label>
+        <input type="number" id="r-umbral" value="-15" min="-90" max="0" step="5">
+      </div>
+      <div class="campo">
+        <label for="r-superficie">Superficie min. ha</label>
+        <input type="number" id="r-superficie" value="3000" min="0" step="1000">
+      </div>
+      <div class="campo">
+        <label for="r-limite">Mostrar</label>
+        <select id="r-limite">
+          <option value="15">15</option>
+          <option value="25" selected>25</option>
+          <option value="50">50</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="r-estado" class="estado">Elegi un cultivo y una fase.</div>
+
+    <div id="r-contenido" hidden>
+      <div class="tarjeta">
+        <h2 id="m-titulo"></h2>
+        <p class="sub">Cada partido pintado por cuanto se desvia su rinde de la
+          tendencia propia en las campanias de esa fase. El encuadre se ajusta
+          solo a la zona donde el cultivo tiene serie. Gris: sin campanias
+          suficientes para medir.</p>
+        <div class="mapa-caja">
+          <div class="lienzo"><svg class="grafico" id="g-mapa" role="img"></svg></div>
+          <div class="lateral">
+            <div class="escala" id="m-escala"></div>
+            <div class="ayuda" id="m-pie"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tarjeta">
+        <h2 id="r-titulo"></h2>
+        <p class="sub" id="r-sub"></p>
+        <svg class="grafico" id="g-ranking" role="img"></svg>
+        <details class="tabla-vista">
+          <summary>Ver la tabla completa</summary>
+          <div class="scrollable"><table class="datos" id="t-ranking"></table></div>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <footer class="pie">
+    <span id="pie-corte">—</span>
+    <span>Rinde: MAGYP, estimaciones agricolas (por partido, no por lote)</span>
+    <span>ENSO: ONI, NOAA CPC</span>
+    <a href="/docs">API</a>
+  </footer>
+</main>
+
+<div class="tooltip" id="tooltip" role="status" aria-live="polite"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>

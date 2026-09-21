@@ -1,0 +1,35 @@
+# Fly.io. Railway y Render no necesitan archivo: detectan el Dockerfile solos,
+# y lo unico que hay que setearles es PORT (ya viene por entorno en ambos).
+
+app = "agroenso"
+primary_region = "eze"          # Buenos Aires: los usuarios estan aca
+
+[build]
+
+[env]
+  PORT = "8080"
+  WEB_CONCURRENCY = "2"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  # Una maquina prendida: el arranque carga el snapshot (~0,7 s) y despues
+  # cada consulta son 20-30 ms. Con min 0 el primer visitante del dia se come
+  # el cold start entero.
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "20s"
+    method = "GET"
+    path = "/api/salud"
+
+[[vm]]
+  # El snapshot ocupa ~40 MB en RAM con los indices y son 2 workers. 512 MB
+  # sobra y deja aire para el pico de un ranking nacional.
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1

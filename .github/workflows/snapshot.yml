@@ -1,0 +1,68 @@
+# Refresco mensual del snapshot + deploy.
+#
+# El MAGYP publica estimaciones una vez por mes y el CPC actualiza el ONI a
+# principios de mes. Correr esto el dia 8 da margen para que las dos fuentes
+# esten al dia.
+#
+# El deploy es una imagen nueva con el dato adentro: no hay job que escriba
+# sobre un volumen compartido mientras la web sirve.
+
+name: snapshot
+
+on:
+  schedule:
+    - cron: "0 9 8 * *"
+  workflow_dispatch:
+
+jobs:
+  construir-y-deployar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r requirements-etl.txt -r requirements-web.txt
+
+      # El clima tarda horas y no se reconstruye en cada refresco: se
+      # recupera el ultimo parquet publicado. Si no hay ninguno todavia, el
+      # ETL sigue igual y la web arranca sin columnas climaticas.
+      - name: recuperar clima ya calculado
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: clima
+          path: data/snapshot
+
+      - name: construir snapshot
+        run: python -m etl.construir --desde 1970
+
+      - name: verificar contrato
+        run: python verificar.py
+
+      - name: conservar el clima para el proximo mes
+        if: hashFiles('data/snapshot/clima.parquet') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: clima
+          path: data/snapshot/clima.parquet
+          retention-days: 90
+          overwrite: true
+
+      # Descomentar la plataforma que corresponda.
+      #
+      # - uses: superfly/flyctl-actions/setup-flyctl@master
+      # - run: flyctl deploy --remote-only
+      #   env:
+      #     FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      #
+      # Railway:  railway up --service agroenso
+      # Render:   curl -fsS "$RENDER_DEPLOY_HOOK"
+
+      - name: humo contra el deploy
+        if: vars.URL_PRODUCCION != ''
+        run: |
+          sleep 45
+          python verificar.py "${{ vars.URL_PRODUCCION }}"
