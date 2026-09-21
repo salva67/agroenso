@@ -257,13 +257,21 @@ class Motor:
             1 - r["superficie_cosechada_ha"] / r["superficie_sembrada_ha"])
         return r.reset_index(drop=True)
 
+    # Columnas de `resumen_por_fase` que la web NO muestra. Cuentan campanias
+    # por debajo de un umbral de siniestro, que es un concepto de poliza: pide
+    # un deducible concreto para significar algo, y esta herramienta razona por
+    # partido, no por contrato. `analisis.resumen_por_fase` las sigue
+    # calculando porque la CLI y el modulo de polizas viven de ellas.
+    SIN_MOSTRAR = ["siniestros", "frec_siniestro_pct"]
+
     def analizar(self, departamento_id: str, cultivo: str, desde: int = 1980,
-                 hasta: int | None = None, umbral: float = -15.0,
+                 hasta: int | None = None,
                  metodo_tendencia: str = "movil") -> dict:
         """El informe completo de una combinacion partido x cultivo."""
         t = self.tabla_campanias(departamento_id, cultivo, desde, hasta,
                                  metodo_tendencia)
-        res = analisis.resumen_por_fase(t, umbral_siniestro=umbral)
+        res = analisis.resumen_por_fase(t)
+        res = res.drop(columns=[c for c in self.SIN_MOSTRAR if c in res.columns])
         sens = analisis.sensibilidad(t)
         cab = t.iloc[0]
         return {
@@ -275,7 +283,6 @@ class Motor:
             "cultivo": str(cab["cultivo"]),
             "ciclo": self.ciclo(str(cab["_cultivo"])),
             "parametros": {"desde": desde, "hasta": hasta or dt.date.today().year,
-                           "umbral_siniestro_pct": umbral,
                            "metodo_tendencia": metodo_tendencia},
             "campanias": t,
             "resumen_fase": res,
@@ -286,7 +293,7 @@ class Motor:
     # -- ranking -----------------------------------------------------------
 
     def ranking(self, cultivo: str, fase: str = "Nina", desde: int = 1980,
-                umbral: float = -15.0, metodo_tendencia: str = "movil",
+                metodo_tendencia: str = "movil",
                 minimo_campanias: int = 15,
                 superficie_minima_ha: float = 0.0) -> pd.DataFrame:
         """Que partidos sufren mas una fase dada, para un cultivo.
@@ -297,8 +304,8 @@ class Motor:
 
         A diferencia de `analizar`, NO corre el bootstrap por partido: con 500
         partidos serian 6 millones de remuestreos por request. El ranking
-        ordena por mediana y frecuencia de siniestro, que es lo que se mira
-        para priorizar; el intervalo de confianza se ve al abrir el partido.
+        ordena por el desvio mediano, que es lo que se mira para priorizar; el
+        intervalo de confianza se ve al abrir el partido.
         """
         cn = self.normalizar_cultivo(cultivo)
         if fase not in FASES:
@@ -341,7 +348,6 @@ class Motor:
                 "campanias_total": int(np.isfinite(desvio).sum()),
                 "desvio_mediano_pct": round(float(np.median(d)), 1),
                 "p10_pct": round(float(np.percentile(d, 10)), 1),
-                "frec_siniestro_pct": round(100 * float((d <= umbral).mean()), 1),
                 "dif_vs_otras_fases": round(
                     float(np.median(d) - np.median(desvio[otras])), 1),
                 "superficie_med_ha": round(

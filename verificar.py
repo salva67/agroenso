@@ -151,7 +151,7 @@ def main(argv):
 
         # -- analisis -------------------------------------------------------
         cod, a = cli.get("/api/analisis", departamento_id="06721",
-                         cultivo="maiz", desde=1980, umbral=-15)
+                         cultivo="maiz", desde=1980)
         check(cod == 200, f"/api/analisis devolvio {cod}: {a}")
         if cod == 200:
             camp = a["campanias"]
@@ -170,10 +170,10 @@ def main(argv):
                       f"percentiles desordenados en {r['fase']}")
                 check(r["ic90_inf"] <= r["ic90_sup"],
                       f"IC invertido en {r['fase']}")
-                check(0 <= r["frec_siniestro_pct"] <= 100,
-                      f"frecuencia fuera de rango en {r['fase']}")
-                check(r["siniestros"] <= r["campanias"],
-                      f"mas siniestros que campanias en {r['fase']}")
+                # El concepto de siniestro es de poliza y la web no lo
+                # muestra: pide un deducible concreto para significar algo.
+                check("frec_siniestro_pct" not in r and "siniestros" not in r,
+                      f"la web sigue exponiendo columnas de siniestro en {r['fase']}")
 
             # El detrend tiene que dejar la serie centrada: si la mediana de
             # TODOS los desvios se va lejos de cero, la tendencia esta mal
@@ -238,7 +238,7 @@ def main(argv):
             m = rk["mapa"]
             check(len(m) == rk["partidos_evaluados"],
                   "el mapa no trae todos los partidos evaluados")
-            check(all(len(x) == 4 for x in m), "filas del mapa mal formadas")
+            check(all(len(x) == 3 for x in m), "filas del mapa mal formadas")
             en_geo = sum(1 for x in m if x[0] in ids_geo)
             check(en_geo == len(m),
                   f"{len(m) - en_geo} partidos del mapa sin poligono")

@@ -141,7 +141,7 @@ function hover(nodo, titulo, fase, filas) {
 // grafico 1: desvio por campania
 // --------------------------------------------------------------------------
 
-function graficoCampanias(svg, filas, umbral) {
+function graficoCampanias(svg, filas) {
   const W = svg.clientWidth || svg.parentNode.clientWidth || 860;
   const M = { t: 14, r: 14, b: 40, l: 46 };
   const H = 300;
@@ -154,7 +154,7 @@ function graficoCampanias(svg, filas, umbral) {
   if (!datos.length) return;
 
   const vals = datos.map((d) => d.desvio_pct);
-  const lim = Math.max(Math.abs(Math.min(...vals, umbral)), Math.abs(Math.max(...vals)), 10) * 1.08;
+  const lim = Math.max(Math.abs(Math.min(...vals)), Math.abs(Math.max(...vals)), 10) * 1.08;
   const y = (v) => M.t + ph * (1 - (v + lim) / (2 * lim));
   const paso = pw / datos.length;
   const ancho = Math.max(3, paso - 2);   // 2px de aire entre barras vecinas
@@ -170,14 +170,6 @@ function graficoCampanias(svg, filas, umbral) {
     g.appendChild(texto(M.l - 8, y(t) + 4, firmado(t, 0) + "%", "eje-txt", { "text-anchor": "end" }));
   }
 
-  // Umbral de siniestro: la linea que define "campania mala". Va punteada a
-  // proposito — es el unico trazo del grafico que NO es dato ni grilla.
-  g.appendChild(el("line", {
-    x1: M.l, x2: M.l + pw, y1: y(umbral), y2: y(umbral),
-    stroke: "var(--alerta)", "stroke-width": 1.5, "stroke-dasharray": "5 4", opacity: .75,
-  }));
-  // Sin rotulo sobre la linea: caeria encima de las barras de esos anios y
-  // la leyenda de arriba ya dice cual es el umbral.
 
   const peor = datos.reduce((a, b) => (b.desvio_pct < a.desvio_pct ? b : a));
   const mejor = datos.reduce((a, b) => (b.desvio_pct > a.desvio_pct ? b : a));
@@ -275,7 +267,7 @@ function graficoFases(svg, resumen) {
       ["Desvio mediano", firmado(r.desvio_mediano_pct) + " %"],
       ["Dif. vs resto", firmado(r.dif_mediana_vs_resto) + " %"],
       ["IC 90 %", `${firmado(r.ic90_inf)} a ${firmado(r.ic90_sup)} %`],
-      ["Campanias bajo umbral", `${r.siniestros} de ${r.campanias} (${num(r.frec_siniestro_pct, 0)} %)`],
+      ["p10 / p90", `${firmado(r.p10_pct)} / ${firmado(r.p90_pct)} %`],
     ]);
     g.appendChild(p);
 
@@ -406,12 +398,8 @@ function graficoMapa(svg, geo, mapa, fase, nombres) {
     }
     const p = el("path", { class: "depto", d, fill: colorDe(r[1]) });
     hover(p, nombres.get(id) || id, null, [
-      [`Campanias en ${fase}`, r[3]],
+      [`Campanias en ${fase}`, r[2]],
       ["Desvio mediano", firmado(r[1]) + " %"],
-      // El umbral ya no es un control de esta vista: la API usa su default
-      // de -15 %. Sin el selector, "bajo umbral" no le dice nada a nadie, asi
-      // que el rotulo nombra el corte.
-      ["Campanias con caida mayor a 15 %", num(r[2], 0) + " %"],
     ]);
     gCon.appendChild(p);
   }
@@ -600,13 +588,11 @@ function pintarPartido(a) {
       nina ? `${nina.campanias} campanias` : ""],
     ["Desvio mediano en Nino", nino ? firmado(nino.desvio_mediano_pct, 0) + " %" : "—",
       nino ? `${nino.campanias} campanias` : ""],
-    ["Campanias bajo umbral en Nina", nina ? num(nina.frec_siniestro_pct, 0) + " %" : "—",
-      nina ? `${nina.siniestros} de ${nina.campanias}` : ""],
+    ["Percentil 10 en Nina", nina ? firmado(nina.p10_pct, 0) + " %" : "—",
+      nina ? "1 de cada 10 campanias cae mas que esto" : ""],
   ].map(([r, c, p]) =>
     `<div class="tile"><div class="rotulo">${r}</div><div class="cifra">${c}</div><div class="pie">${p}</div></div>`
   ).join("");
-
-  $("#ley-umbral").textContent = `umbral de siniestro ${firmado(a.parametros.umbral_siniestro_pct, 0)} %`;
 
   // Mostrar ANTES de dibujar: dentro de un contenedor con `hidden` el SVG
   // mide 0 de ancho, el grafico cae al ancho por defecto y despues queda
@@ -614,7 +600,7 @@ function pintarPartido(a) {
   $("#p-estado").hidden = true;
   $("#p-contenido").hidden = false;
 
-  graficoCampanias($("#g-campanias"), a.campanias, a.parametros.umbral_siniestro_pct);
+  graficoCampanias($("#g-campanias"), a.campanias);
   graficoFases($("#g-fases"), res);
 
   tabla($("#t-campanias"), [
@@ -634,8 +620,6 @@ function pintarPartido(a) {
     { tit: "Desvio mediano %", fmt: (f) => firmado(f.desvio_mediano_pct) },
     { tit: "p10 %", fmt: (f) => firmado(f.p10_pct) },
     { tit: "p90 %", fmt: (f) => firmado(f.p90_pct) },
-    { tit: "Bajo umbral", fmt: (f) => `${f.siniestros} / ${f.campanias}` },
-    { tit: "Frec. %", fmt: (f) => num(f.frec_siniestro_pct, 0) },
     { tit: "Dif. vs resto %", fmt: (f) => firmado(f.dif_mediana_vs_resto) },
     { tit: "IC 90 %", fmt: (f) => `${firmado(f.ic90_inf)} a ${firmado(f.ic90_sup)}` },
   ], FASES.map((f) => res.find((r) => r.fase === f)).filter(Boolean));
@@ -662,7 +646,6 @@ function paramsPartido() {
     departamento_id: $("#f-partido").value,
     cultivo: $("#f-cultivo").value,
     desde: $("#f-desde").value,
-    umbral: $("#f-umbral").value,
     tendencia: $("#f-tendencia").value,
   };
 }
@@ -877,8 +860,7 @@ function pestania(cual) {
 
 function redibujar() {
   if (estado.analisis && !$("#vista-partido").hidden) {
-    graficoCampanias($("#g-campanias"), estado.analisis.campanias,
-      estado.analisis.parametros.umbral_siniestro_pct);
+    graficoCampanias($("#g-campanias"), estado.analisis.campanias);
     graficoFases($("#g-fases"), estado.analisis.resumen_fase);
   }
   if (estado.ranking && !$("#vista-ranking").hidden) {
@@ -926,7 +908,7 @@ function init() {
     await cargarCultivosDelPartido();
     consultarPartido();
   };
-  for (const s of ["#f-cultivo", "#f-desde", "#f-umbral", "#f-tendencia"]) {
+  for (const s of ["#f-cultivo", "#f-desde", "#f-tendencia"]) {
     alCambiar(s, consultarPartido);
   }
   for (const s of ["#r-cultivo", "#r-fase", "#r-provincia", "#r-desde",

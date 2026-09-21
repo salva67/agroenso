@@ -46,7 +46,7 @@ MOTOR: consulta.Motor | None = None
 # Consulta con la que abre la web: el mapa se dibuja solo al entrar, asi que
 # esta combinacion se pide en cada primera visita. Tiene que coincidir con
 # CULTIVO_INICIAL y los valores por defecto de los filtros en app.js.
-PRECALENTAR = dict(cultivo="maiz", fase="Nina", desde=1980, umbral=-15.0,
+PRECALENTAR = dict(cultivo="maiz", fase="Nina", desde=1980,
                    metodo_tendencia="movil", minimo_campanias=15,
                    superficie_minima_ha=3000.0)
 
@@ -63,8 +63,8 @@ def _precalentar():
     """
     try:
         clave = ("rk", PRECALENTAR["cultivo"], PRECALENTAR["fase"],
-                 PRECALENTAR["desde"], PRECALENTAR["umbral"],
-                 PRECALENTAR["metodo_tendencia"], PRECALENTAR["minimo_campanias"],
+                 PRECALENTAR["desde"], PRECALENTAR["metodo_tendencia"],
+                 PRECALENTAR["minimo_campanias"],
                  PRECALENTAR["superficie_minima_ha"])
         _cache[clave] = MOTOR.ranking(**PRECALENTAR)
         print(f"  precalentado: ranking de {PRECALENTAR['cultivo']} en "
@@ -302,12 +302,12 @@ def geo_departamentos():
 # Analisis
 # ---------------------------------------------------------------------------
 
-def _analisis(m, departamento_id, cultivo, desde, hasta, umbral, tendencia):
-    clave = ("an", departamento_id, cultivo, desde, hasta, umbral, tendencia)
+def _analisis(m, departamento_id, cultivo, desde, hasta, tendencia):
+    clave = ("an", departamento_id, cultivo, desde, hasta, tendencia)
     try:
         return _cacheado(clave, lambda: m.analizar(
             departamento_id, cultivo, desde=desde, hasta=hasta,
-            umbral=umbral, metodo_tendencia=tendencia))
+            metodo_tendencia=tendencia))
     except consulta.SinDatos as e:
         raise HTTPException(404, str(e))
     except ValueError as e:
@@ -319,9 +319,6 @@ def analisis(departamento_id: str,
              cultivo: str,
              desde: int = Query(1980, ge=1970, le=2024),
              hasta: int | None = Query(None, ge=1970, le=2100),
-             umbral: float = Query(-15.0, ge=-90, le=0,
-                                   description="desvio %% bajo el cual la "
-                                               "campania cuenta como siniestro"),
              tendencia: str = Query("movil", pattern="^(movil|lineal)$")):
     """Informe completo de un partido x cultivo.
 
@@ -330,7 +327,7 @@ def analisis(departamento_id: str,
     el ranking de sensibilidad climatica si el snapshot tiene clima.
     """
     m = _motor()
-    r = _analisis(m, departamento_id, cultivo, desde, hasta, umbral, tendencia)
+    r = _analisis(m, departamento_id, cultivo, desde, hasta, tendencia)
     return {
         "partido": r["partido"],
         "cultivo": r["cultivo"],
@@ -380,13 +377,12 @@ def _advertencias(r: dict) -> list[str]:
 def analisis_csv(departamento_id: str, cultivo: str,
                  desde: int = Query(1980, ge=1970, le=2024),
                  hasta: int | None = None,
-                 umbral: float = Query(-15.0, ge=-90, le=0),
                  tendencia: str = Query("movil", pattern="^(movil|lineal)$"),
                  tabla: str = Query("campanias",
                                     pattern="^(campanias|resumen|sensibilidad)$")):
     """La misma consulta, descargable. Es el formato en que esto se usa de verdad."""
     m = _motor()
-    r = _analisis(m, departamento_id, cultivo, desde, hasta, umbral, tendencia)
+    r = _analisis(m, departamento_id, cultivo, desde, hasta, tendencia)
     df = {"campanias": r["campanias"], "resumen": r["resumen_fase"],
           "sensibilidad": r["sensibilidad"]}[tabla]
     etiqueta = f"{r['partido']['departamento']}_{r['cultivo']}".replace(" ", "_")
@@ -397,7 +393,6 @@ def analisis_csv(departamento_id: str, cultivo: str,
 def ranking(cultivo: str,
             fase: str = Query("Nina", pattern="^(Nino|Nina|Neutro)$"),
             desde: int = Query(1980, ge=1970, le=2024),
-            umbral: float = Query(-15.0, ge=-90, le=0),
             tendencia: str = Query("movil", pattern="^(movil|lineal)$"),
             minimo_campanias: int = Query(15, ge=5, le=55),
             superficie_minima_ha: float = Query(0.0, ge=0),
@@ -410,11 +405,11 @@ def ranking(cultivo: str,
     de confianza de un partido concreto hay que abrir `/api/analisis`.
     """
     m = _motor()
-    clave = ("rk", cultivo, fase, desde, umbral, tendencia, minimo_campanias,
+    clave = ("rk", cultivo, fase, desde, tendencia, minimo_campanias,
              superficie_minima_ha)
     try:
         d = _cacheado(clave, lambda: m.ranking(
-            cultivo, fase=fase, desde=desde, umbral=umbral,
+            cultivo, fase=fase, desde=desde,
             metodo_tendencia=tendencia, minimo_campanias=minimo_campanias,
             superficie_minima_ha=superficie_minima_ha))
     except consulta.SinDatos as e:
@@ -427,20 +422,19 @@ def ranking(cultivo: str,
         d = d[d["provincia"].map(normalizar) == pn]
     # `mapa` lleva TODOS los partidos evaluados, no solo el top: el ranking se
     # lee de a 25 pero el mapa los pinta a todos. Van en arrays posicionales
-    # [id, desvio, frec_siniestro, n_campanias] en vez de objetos con claves
+    # [id, desvio, n_campanias] en vez de objetos con claves
     # repetidas: son ~500 filas y asi el payload baja de 90 KB a 20.
-    mapa = [[r.departamento_id, r.desvio_mediano_pct, r.frec_siniestro_pct,
-             int(r.campanias_fase)] for r in d.itertuples()]
+    mapa = [[r.departamento_id, r.desvio_mediano_pct, int(r.campanias_fase)]
+            for r in d.itertuples()]
     return {
         "cultivo": cultivo, "fase": fase,
-        "parametros": {"desde": desde, "umbral_siniestro_pct": umbral,
-                       "metodo_tendencia": tendencia,
+        "parametros": {"desde": desde, "metodo_tendencia": tendencia,
                        "minimo_campanias": minimo_campanias,
                        "superficie_minima_ha": superficie_minima_ha},
         "partidos_evaluados": int(len(d)),
         "ranking": registros(d.head(limite)),
         "mapa_campos": ["departamento_id", "desvio_mediano_pct",
-                        "frec_siniestro_pct", "campanias_fase"],
+                        "campanias_fase"],
         "mapa": mapa,
         "nota": "Ordenado por desvio mediano en la fase. Sin IC por partido: "
                 "abrir /api/analisis para el intervalo de confianza.",

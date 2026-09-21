@@ -46,7 +46,7 @@ más 0,5 MB de polígonos. Entra entero en memoria del proceso web. No hay base
 de datos porque no hace falta una.
 
 **Se precomputa el DATO, no el RESULTADO.** Los estadísticos por fase dependen
-de `umbral`, `desde` y `metodo_tendencia`, que son justamente las perillas que
+de `desde` y `metodo_tendencia`, que son justamente las perillas que
 mueve quien lee el informe. Congelarlos en una tabla de resultados obligaría a
 recalcular el snapshot entero por cada combinación. Con el dato normalizado en
 RAM, calcular al vuelo cuesta 23 ms.
@@ -93,7 +93,7 @@ uvicorn web.api:app --reload
 
 En `http://localhost:8000`. Dos vistas:
 
-- **Un partido** — la serie campaña a campaña con el desvío contra su
+- **Analizar un partido** — la serie campaña a campaña con el desvío contra su
   tendencia, coloreada por fase; la diferencia de medianas por fase con IC 90 %;
   el ranking de sensibilidad climática; y las advertencias metodológicas que
   corresponden a *ese* resultado. Descargable en CSV.
@@ -114,7 +114,7 @@ En `http://localhost:8000`. Dos vistas:
 La API está documentada sola en `/docs`. Los endpoints útiles:
 
 ```
-GET /api/analisis?departamento_id=06721&cultivo=maiz&desde=1980&umbral=-15
+GET /api/analisis?departamento_id=06721&cultivo=maiz&desde=1980
 GET /api/ranking?cultivo=maiz&fase=Nina&superficie_minima_ha=3000
 GET /api/dispersion?cultivo=maiz&desde=1980  → la nube entera, sin resumir
 GET /api/analisis.csv?...&tabla=resumen
@@ -259,7 +259,7 @@ python verificar.py http://localhost:8000    # contra el contenedor
 python verificar.py https://mi-deploy.dev    # contra el deploy
 ```
 
-71 chequeos. No compara contra números fijos —el snapshot cambia todos los
+68 chequeos. No compara contra números fijos —el snapshot cambia todos los
 meses y un test así se rompe solo—: valida invariantes. Que las fases sumen
 las campañas, que los percentiles estén ordenados, que la clasificación
 respete el umbral del CPC, que el detrend no deje sesgo, que no se escape un
@@ -348,6 +348,18 @@ lo chequea y falla si alguno se pierde.
   variabilidad. `oni_medio` suele quedar último en el ranking de
   sensibilidad: actúa sobre el rinde a través de la lluvia y la temperatura,
   no directamente.
+
+### La web no habla de siniestros
+
+El umbral de siniestro es un concepto de **póliza**: para significar algo pide
+un deducible concreto, y esta herramienta razona por partido, no por contrato.
+Además, medido, no cambiaba nada en el mapa: con −5 %, −15 % y −30 % el color
+de los 483 partidos era idéntico.
+
+Así que la web reporta **medianas, percentiles e intervalos de confianza**, y
+nada de conteos de siniestro. `analisis.resumen_por_fase` los sigue calculando
+—la CLI y el módulo de pólizas viven de ellos—; es la capa web la que los
+descarta, en `consulta.Motor.SIN_MOSTRAR`.
 
 ### Los estáticos van versionados
 
